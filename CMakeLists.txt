@@ -112,8 +112,8 @@ endif()
 # Zydis
 #
 
-if(POLYHOOK_DISASM_ZYDIS AND NOT POLYHOOK_USE_EXTERNAL_ZYDIS)
-    set(ZYDIS_BUILD_SHARED_LIB ${POLYHOOK_BUILD_SHARED_ZYDIS} CACHE BOOL "")
+if(NOT POLYHOOK_USE_EXTERNAL_ZYDIS)
+  set(ZYDIS_BUILD_SHARED_LIB ${POLYHOOK_BUILD_SHARED_ZYDIS} CACHE BOOL "")
 	set(ZYCORE_BUILD_SHARED_LIB ${POLYHOOK_BUILD_SHARED_ZYDIS} CACHE BOOL "")
 	set(ZYDIS_BUILD_TOOLS OFF CACHE BOOL "")
 	set(ZYDIS_BUILD_EXAMPLES OFF CACHE BOOL "")
@@ -224,26 +224,25 @@ if(POLYHOOK_DISASM_CAPSTONE)
 endif()
 
 #DisAsm/Zydis
-if(POLYHOOK_DISASM_ZYDIS)
-	if (POLYHOOK_USE_EXTERNAL_ZYDIS)
-		find_path(ZYDIS_INCLUDE_DIR NAMES zydis/zydis.h)
-		find_path(ZYCORE_INCLUDE_DIR NAMES zycore/zycore.h)
+if(POLYHOOK_USE_EXTERNAL_ZYDIS)
 		find_library(ZYDIS_LIBRARY NAMES zydis)
 		find_library(ZYCORE_LIBRARY NAMES zycore)
+		find_path(ZYDIS_INCLUDE_DIR NAMES zydis/zydis.h)
+		find_path(ZYCORE_INCLUDE_DIR NAMES zycore/zycore.h)
 		target_link_libraries(${PROJECT_NAME} PRIVATE ${ZYDIS_LIBRARY})
 		target_link_libraries(${PROJECT_NAME} PRIVATE ${ZYCORE_LIBRARY})
 		target_include_directories(${PROJECT_NAME} PRIVATE ${ZYDIS_INCLUDE_DIR})
 		target_include_directories(${PROJECT_NAME} PRIVATE ${ZYCORE_INCLUDE_DIR})
-	else()
+else()
 		target_link_libraries(${PROJECT_NAME} PUBLIC $<BUILD_INTERFACE:Zydis>)
 		target_include_directories(${PROJECT_NAME} PRIVATE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/zydis/include>)
 		target_include_directories(${PROJECT_NAME} PRIVATE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/zydis/dependencies/zycore/include>)
 		target_include_directories(${PROJECT_NAME} PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/zydis>)
-	endif()
-	
-	target_sources(${PROJECT_NAME} PRIVATE "${PROJECT_SOURCE_DIR}/sources/ZydisDisassembler.cpp")
-	install(FILES ${PROJECT_SOURCE_DIR}/polyhook2/ZydisDisassembler.hpp DESTINATION include/polyhook2)
 endif()
+	
+target_sources(${PROJECT_NAME} PRIVATE "${PROJECT_SOURCE_DIR}/sources/ZydisDisassembler.cpp")
+install(FILES ${PROJECT_SOURCE_DIR}/polyhook2/ZydisDisassembler.hpp DESTINATION include/polyhook2)
+
 
 #Feature/Detours
 if(POLYHOOK_FEATURE_DETOURS)
