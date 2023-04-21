@@ -273,6 +273,7 @@ bool PLH::x64Detour::hook() {
 			Log::log("Trampoline Jmp Tbl:\n" + instsToStr(jmpTblOpt) + "\n", ErrorLevel::INFO);
 	}
 
+	bool hook_ready = false;
 	*m_userTrampVar = m_trampoline;
 	m_hookSize = (uint32_t)roundProlSz;
 	m_nopProlOffset = (uint16_t)minProlSz;
@@ -285,14 +286,20 @@ bool PLH::x64Detour::hook() {
 		uint64_t region = (uint64_t)m_allocator.allocate(min, max);
 		if (!region) {
 			Log::log("VirtualAlloc2 failed to find a region near function", ErrorLevel::SEV);
-			return false;
+		} else if (region < min || region >= max) {
+			// Check allocated address is actually within requested range to allow falling back to CODE_CAVE if configured
+			// This can happen on WINE, possibly due to broken VirtualAlloc2 implementation?
+			Log::log("VirtualAlloc2 allocated outside of range", ErrorLevel::SEV);
+			m_allocator.deallocate(region);
+		} else {
+			m_valloc2_region = region;
+
+			MemoryProtector holderProt(region, 8, ProtFlag::R | ProtFlag::W | ProtFlag::X, *this, false);
+			m_hookInsts = makex64MinimumJump(m_fnAddress, m_fnCallback, region);
+			hook_ready = true;
 		}
-
-		m_valloc2_region = region;
-
-		MemoryProtector holderProt(region, 8, ProtFlag::R | ProtFlag::W | ProtFlag::X, *this, false);
-		m_hookInsts = makex64MinimumJump(m_fnAddress, m_fnCallback, region);
-	} else if(_detourScheme == detour_scheme_t::CODE_CAVE || _detourScheme == detour_scheme_t::VALLOC2_FALLBACK_CODE_CAVE){
+	}
+	if (!hook_ready && (_detourScheme == detour_scheme_t::CODE_CAVE || _detourScheme == detour_scheme_t::VALLOC2_FALLBACK_CODE_CAVE)) {
 		// we're really space constrained, try to do some stupid hacks like checking for 0xCC's near us
 		auto cave = findNearestCodeCave<8>(m_fnAddress);
 		if (!cave) {
@@ -302,10 +309,15 @@ bool PLH::x64Detour::hook() {
 
 		MemoryProtector holderProt(*cave, 8, ProtFlag::R | ProtFlag::W | ProtFlag::X, *this, false);
 		m_hookInsts = makex64MinimumJump(m_fnAddress, m_fnCallback, *cave);
+		hook_ready = true;
 	} else {
 		//inplace scheme. This is more stable than the cave finder since that may potentially find a region of unstable memory. 
 		// However, this INPLACE scheme may only be done for functions with a large enough prologue, otherwise this will overwrite adjacent bytes
 		m_hookInsts = makeInplaceDetour(m_fnAddress, m_fnCallback);
+		hook_ready = true;
+	}
+	if (!hook_ready) {
+		return false;
 	}
 	m_disasm.writeEncoding(m_hookInsts, *this);
 
